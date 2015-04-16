@@ -31,25 +31,18 @@ object idSeekLeafPlanner extends LeafPlanner {
     val predicates: Seq[Expression] = queryGraph.selections.flatPredicates
 
     val idSeekPredicates: Seq[(In, Identifier, EntityByIdRhs)] = predicates.collect {
-      // MATCH (a)-[r]->b WHERE id(r) IN value
+      // MATCH (a)-[r]->b WHERE id(r) IN [...]
       // MATCH a WHERE id(a) IN value
       case predicate@In(func@FunctionInvocation(_, _, IndexedSeq(idExpr: Identifier)), idsExpr@Collection(idValueExprs))
         if func.function == Some(functions.Id) &&
            idValueExprs.forall(ConstantExpression.unapply(_).isDefined) =>
-        (predicate, idExpr, EntityByIdExprs(idValueExprs))
+        (predicate, idExpr, EntityByIdRhs(idsExpr, Some(idValueExprs.size)))
 
-      // MATCH (a)-[r]->b WHERE id(r) IN {param}
+      // MATCH (a)-[r]->b WHERE id(r) IN expr
       // MATCH a WHERE id(a) IN {param}
-      case predicate@In(func@FunctionInvocation(_, _, IndexedSeq(idExpr: Identifier)), param@Parameter(_))
+      case predicate@In(func@FunctionInvocation(_, _, IndexedSeq(idExpr: Identifier)), idsExpr)
         if func.function == Some(functions.Id) =>
-        (predicate, idExpr, EntityByIdParameter(param))
-
-      // MATCH (a)-[r]->b WHERE id(r) IN identifier
-      // MATCH a WHERE id(a) IN identifier
-      case predicate@In(func@FunctionInvocation(_, _, IndexedSeq(idExpr: Identifier)), identifier@Identifier(name))
-        if func.function == Some(functions.Id) &&
-           queryGraph.argumentIds(IdName(name)) =>
-        (predicate, idExpr, EntityByIdIdentifier(identifier))
+        (predicate, idExpr, EntityByIdRhs(idsExpr))
     }
 
     val candidatePlans = idSeekPredicates.collect {
